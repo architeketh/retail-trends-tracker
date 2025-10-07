@@ -1,19 +1,27 @@
 // tools/scrape_feeds.js
-// Fetch RSS/Atom, normalize to JSON, always write at least 1 item
+// Fetch RSS/Atom feeds, normalize to JSON, write to data/articles.json
+// Uses fast-xml-parser v4 XMLParser (correct for v4)
+
 import { writeFileSync } from "fs";
-import { parse } from "fast-xml-parser";
+import { XMLParser } from "fast-xml-parser";
 
 const FEEDS = [
-  { name: "Retail Dive",           url: "https://www.retaildive.com/feeds/news/" },
-  { name: "Fashion Dive",          url: "https://www.fashiondive.com/feeds/news/" },
-  { name: "NRF News",              url: "https://nrf.com/rss.xml" },
-  { name: "RetailWire",            url: "https://www.retailwire.com/feed/" },
-  { name: "PYMNTS Retail",         url: "https://www.pymnts.com/category/retail/feed/" },
-  { name: "Chain Store Age",       url: "https://chainstoreage.com/rss.xml" },
-  { name: "Practical Ecommerce",   url: "https://www.practicalecommerce.com/feed" }
+  { name: "Retail Dive",            url: "https://www.retaildive.com/feeds/news/" },
+  { name: "Fashion Dive",           url: "https://www.fashiondive.com/feeds/news/" },
+  { name: "NRF News",               url: "https://nrf.com/rss.xml" },
+  { name: "RetailWire",             url: "https://www.retailwire.com/feed/" },
+  { name: "PYMNTS Retail",          url: "https://www.pymnts.com/category/retail/feed/" },
+  { name: "Chain Store Age",        url: "https://chainstoreage.com/rss.xml" },
+  { name: "Practical Ecommerce",    url: "https://www.practicalecommerce.com/feed" }
 ];
 
 const UA = "RetailTrendsTracker/1.0 (+github actions; https://github.com/)";
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  textNodeName: "#text",
+  trimValues: false,
+});
 
 function stripHtml(html){ return (html||"").replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim(); }
 function toEpoch(s){ const t = Date.parse(s); return Number.isFinite(t) ? t : Date.now(); }
@@ -22,7 +30,7 @@ function pickAtomLink(entry){
   if (!link) return "#";
   if (typeof link === "string") return link;
   if (Array.isArray(link)) {
-    const alt = link.find(l => ((l["@_rel"]||l.rel) !== "self") && (l["@_href"]||l.href));
+    const alt = link.find(l => ((l["@_rel"]||l.rel)!=="self") && (l["@_href"]||l.href));
     return alt ? (alt["@_href"]||alt.href) : (link[0]["@_href"]||link[0].href||"#");
   }
   return link["@_href"] || link.href || "#";
@@ -41,28 +49,33 @@ async function fetchText(url){
 }
 
 function parseFeed(xml){
-  const obj = parse(xml, { ignoreAttributes:false, attributeNamePrefix:"@_", textNodeName:"#text" });
+  const obj = parser.parse(xml);
 
-  // RSS
+  // RSS 2.0
   if (obj?.rss?.channel?.item){
     const items = Array.isArray(obj.rss.channel.item) ? obj.rss.channel.item : [obj.rss.channel.item];
     return items.map(it => ({
       title: (it.title && (it.title["#text"] || it.title)) || "Untitled",
-      link: typeof it.link==="string" ? it.link : (it.link?.["#text"] || it["atom:link"]?.["@_href"] || "#"),
+      link: typeof it.link === "string" ? it.link : (it.link?.["#text"] || it["atom:link"]?.["@_href"] || "#"),
       excerpt: stripHtml((it.description && (it.description["#text"] || it.description)) || ""),
       published: toEpoch(it.pubDate || it["dc:date"] || it["pubdate"] || Date.now())
     }));
   }
+
   // Atom
   if (obj?.feed?.entry){
     const entries = Array.isArray(obj.feed.entry) ? obj.feed.entry : [obj.feed.entry];
     return entries.map(e => ({
       title: (e.title && (e.title["#text"] || e.title)) || "Untitled",
       link: pickAtomLink(e),
-      excerpt: stripHtml((e.summary && (e.summary["#text"]||e.summary)) || (e.content && (e.content["#text"]||e.content)) || ""),
+      excerpt: stripHtml(
+        (e.summary && (e.summary["#text"]||e.summary)) ||
+        (e.content && (e.content["#text"]||e.content)) || ""
+      ),
       published: toEpoch(e.updated || e.published || Date.now())
     }));
   }
+
   return [];
 }
 
@@ -101,7 +114,7 @@ async function main(){
     .sort((a,b)=> (b.published||0) - (a.published||0))
     .slice(0, 600);
 
-  // 🔒 Safety net: if nothing fetched, write one visible test item so the page never looks “empty”
+  // Safety net so the page never looks empty while debugging
   if (merged.length === 0) {
     merged = [{
       id: "smoke-"+Date.now(),
