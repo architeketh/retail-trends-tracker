@@ -2,13 +2,13 @@ name: Fetch retail feeds
 
 on:
   push:
-    branches: [ "main" ]   # auto-run on every push
-  workflow_dispatch: {}     # manual "Run workflow"
+    branches: [ "main" ]         # run on every push
+  workflow_dispatch: {}           # manual button
   schedule:
-    - cron: "15 * * * *"    # hourly at :15
+    - cron: "15 * * * *"          # hourly at :15
 
 permissions:
-  contents: write
+  contents: write                 # allow committing data
 
 jobs:
   fetch:
@@ -21,14 +21,14 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      # npm install (not ci) so first run works without lockfile
+      # npm install (not ci) so first run works without a lockfile
       - run: npm install
 
       - name: Build data file
         run: npm run fetch
 
       - name: Commit & push if changed
-        if: ${{ success() }}  # don't commit on failure
+        if: ${{ success() }}
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
             git config user.name "${{ github.actor }}"
