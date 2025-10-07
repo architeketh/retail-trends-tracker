@@ -1,26 +1,32 @@
 name: Fetch retail feeds
 
 on:
-  workflow_dispatch: {}
-  schedule:
-    - cron: "15 * * * *" # hourly at :15
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]           # runs on every push to main
+  workflow_dispatch: {}            # allow manual "Run workflow"
+  schedule:
+    - cron: "15 * * * *"           # hourly at :15
 
 permissions:
-  contents: write
+  contents: write                  # allow committing the data file
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
-      - run: npm run fetch
+
+      # Use npm install (not npm ci) so the very first run works without a lockfile
+      - run: npm install
+
+      - name: Build data file
+        run: npm run fetch
+
       - name: Commit & push if changed
         run: |
           if [[ -n "$(git status --porcelain)" ]]; then
