@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Retail Trends Tracker — Time Buckets & Chips</title>
+<title>Retail Trends Tracker — Daily / Weekly / Monthly with Chips</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
@@ -45,13 +45,13 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 .chip{display:inline-flex;align-items:center;gap:6px;background:#667eea;color:#fff;border-radius:999px;font-size:12px;font-weight:800;padding:4px 10px;cursor:pointer}
 .chip b{font-size:14px}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js" defer></script>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>📊 Retail Trends Tracker</h1>
-    <div class="muted">Grouped by day/week/month • Daily & Weekly keyword/brand charts (with filters)</div>
+    <div class="muted">Grouped by day/week/month • Daily, Weekly & Monthly keyword/brand charts (with filters)</div>
     <a href="archive.html" class="btn">📦 Open Archive</a>
   </header>
 
@@ -79,6 +79,7 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
     </div>
 
     <div>
+      <!-- Daily charts -->
       <div class="section">
         <h2>📈 Daily Keywords (14 days)</h2>
         <div class="row">
@@ -99,6 +100,7 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
         <canvas id="dailyBrandsChart"></canvas>
       </div>
 
+      <!-- Weekly charts -->
       <div class="section">
         <h2>📈 Weekly Keywords (12 weeks)</h2>
         <div class="row">
@@ -117,6 +119,27 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
           <div id="wbChips" class="chips"></div>
         </div>
         <canvas id="weeklyBrandsChart"></canvas>
+      </div>
+
+      <!-- Monthly charts -->
+      <div class="section">
+        <h2>📈 Monthly Keywords (12 months)</h2>
+        <div class="row">
+          <select id="mkSelect"><option value="">+ Add keyword…</option></select>
+          <button id="mkClear" class="btn-ghost">Clear</button>
+          <div id="mkChips" class="chips"></div>
+        </div>
+        <canvas id="monthlyKeywordsChart"></canvas>
+      </div>
+
+      <div class="section">
+        <h2>📈 Monthly Brands (12 months)</h2>
+        <div class="row">
+          <select id="mbSelect"><option value="">+ Add brand…</option></select>
+          <button id="mbClear" class="btn-ghost">Clear</button>
+          <div id="mbChips" class="chips"></div>
+        </div>
+        <canvas id="monthlyBrandsChart"></canvas>
       </div>
     </div>
   </div>
@@ -176,7 +199,7 @@ function tagText(title, excerpt, list){
   const text = `${title} ${excerpt}`.toLowerCase();
   const out = [];
   for(const term of list){
-    const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const esc = term.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
     const re = new RegExp(`\\b${esc}\\b`, "i");
     if(re.test(text)) out.push(term);
   }
@@ -207,6 +230,15 @@ function lastNWeeks(n){
   const out=[]; const today=new Date(); today.setHours(0,0,0,0);
   for(let i=n-1;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i*7); out.push(isoWeek(d)); }
   return out.filter((v,i,a)=>a.indexOf(v)===i);
+}
+function last12MonthLabels(){
+  const now = new Date();
+  const labels = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    labels.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }));
+  }
+  return labels;
 }
 
 // ---- Bucketing ----
@@ -240,6 +272,29 @@ function bucketWeeklyTerms(items, field, nweeks=12){
   }
   return { labels, buckets };
 }
+function bucketMonthlyTerms(items, field){
+  const labels = last12MonthLabels();
+  const keys = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    keys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+  const pos = new Map(keys.map((k,i)=>[k,i]));
+  const buckets = {};
+  for (const a of items){
+    if (!a.published) continue;
+    const d = new Date(a.published);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const idx = pos.get(key);
+    if (idx === undefined) continue;
+    for (const t of (a[field]||[])){
+      (buckets[t] ||= Array(labels.length).fill(0))[idx] += 1;
+    }
+  }
+  return { labels, buckets };
+}
+
 function topTerms(buckets, n=8){
   return Object.entries(buckets).map(([k,arr])=>[k,arr.reduce((s,v)=>s+v,0)])
     .sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k])=>k);
@@ -247,7 +302,7 @@ function topTerms(buckets, n=8){
 function palette(k){ const c=['#667eea','#764ba2','#f093fb','#4facfe','#43e97b','#fa709a','#30cfd0','#ffbe0b','#8338ec','#3a86ff','#06ffa5','#fb5607']; return c[k % c.length]; }
 
 // ---- Filter state ----
-let DK_SELECTED=[], DB_SELECTED=[], WK_SELECTED=[], WB_SELECTED=[];
+let DK_SELECTED=[], DB_SELECTED=[], WK_SELECTED=[], WB_SELECTED=[], MK_SELECTED=[], MB_SELECTED=[];
 let KW_ALL=[], BR_ALL=[];
 
 function chip(label){ return `<span class="chip" data-v="${label}">${label} <b>×</b></span>`; }
@@ -257,6 +312,8 @@ function updateChipBar(kind){
     db: ['dbChips', ()=>DB_SELECTED, v=>DB_SELECTED=DB_SELECTED.filter(x=>x!==v)],
     wk: ['wkChips', ()=>WK_SELECTED, v=>WK_SELECTED=WK_SELECTED.filter(x=>x!==v)],
     wb: ['wbChips', ()=>WB_SELECTED, v=>WB_SELECTED=WB_SELECTED.filter(x=>x!==v)],
+    mk: ['mkChips', ()=>MK_SELECTED, v=>MK_SELECTED=MK_SELECTED.filter(x=>x!==v)],
+    mb: ['mbChips', ()=>MB_SELECTED, v=>MB_SELECTED=MB_SELECTED.filter(x=>x!==v)]
   };
   const [id, get, remove] = map[kind];
   const el = document.getElementById(id);
@@ -271,7 +328,6 @@ function updateChipBar(kind){
   });
 }
 function populateSelects(items){
-  // build term dictionaries from items
   const kwSet=new Set(), brSet=new Set();
   for(const a of items){
     (a.keywords||[]).forEach(k=>kwSet.add(k));
@@ -283,23 +339,28 @@ function populateSelects(items){
   const sel = (id,list)=>{ const el=document.getElementById(id); el.innerHTML = `<option value="">+ Add…</option>`+list.map(x=>`<option>${x}</option>`).join(''); return el; };
 
   const dkSel=sel('dkSelect',KW_ALL), dbSel=sel('dbSelect',BR_ALL),
-        wkSel=sel('wkSelect',KW_ALL), wbSel=sel('wbSelect',BR_ALL);
+        wkSel=sel('wkSelect',KW_ALL), wbSel=sel('wbSelect',BR_ALL),
+        mkSel=sel('mkSelect',KW_ALL), mbSel=sel('mbSelect',BR_ALL);
 
   dkSel.onchange = ()=>{ const v=dkSel.value; if(v && !DK_SELECTED.includes(v)){ DK_SELECTED.push(v); updateChipBar('dk'); renderAllCharts(window.__ALL_ITEMS||[]);} dkSel.value=""; };
   dbSel.onchange = ()=>{ const v=dbSel.value; if(v && !DB_SELECTED.includes(v)){ DB_SELECTED.push(v); updateChipBar('db'); renderAllCharts(window.__ALL_ITEMS||[]);} dbSel.value=""; };
   wkSel.onchange = ()=>{ const v=wkSel.value; if(v && !WK_SELECTED.includes(v)){ WK_SELECTED.push(v); updateChipBar('wk'); renderAllCharts(window.__ALL_ITEMS||[]);} wkSel.value=""; };
   wbSel.onchange = ()=>{ const v=wbSel.value; if(v && !WB_SELECTED.includes(v)){ WB_SELECTED.push(v); updateChipBar('wb'); renderAllCharts(window.__ALL_ITEMS||[]);} wbSel.value=""; };
+  mkSel.onchange = ()=>{ const v=mkSel.value; if(v && !MK_SELECTED.includes(v)){ MK_SELECTED.push(v); updateChipBar('mk'); renderAllCharts(window.__ALL_ITEMS||[]);} mkSel.value=""; };
+  mbSel.onchange = ()=>{ const v=mbSel.value; if(v && !MB_SELECTED.includes(v)){ MB_SELECTED.push(v); updateChipBar('mb'); renderAllCharts(window.__ALL_ITEMS||[]);} mbSel.value=""; };
 
   document.getElementById('dkClear').onclick=()=>{ DK_SELECTED=[]; updateChipBar('dk'); renderAllCharts(window.__ALL_ITEMS||[]); };
   document.getElementById('dbClear').onclick=()=>{ DB_SELECTED=[]; updateChipBar('db'); renderAllCharts(window.__ALL_ITEMS||[]); };
   document.getElementById('wkClear').onclick=()=>{ WK_SELECTED=[]; updateChipBar('wk'); renderAllCharts(window.__ALL_ITEMS||[]); };
   document.getElementById('wbClear').onclick=()=>{ WB_SELECTED=[]; updateChipBar('wb'); renderAllCharts(window.__ALL_ITEMS||[]); };
+  document.getElementById('mkClear').onclick=()=>{ MK_SELECTED=[]; updateChipBar('mk'); renderAllCharts(window.__ALL_ITEMS||[]); };
+  document.getElementById('mbClear').onclick=()=>{ MB_SELECTED=[]; updateChipBar('mb'); renderAllCharts(window.__ALL_ITEMS||[]); };
 
-  updateChipBar('dk'); updateChipBar('db'); updateChipBar('wk'); updateChipBar('wb');
+  updateChipBar('dk'); updateChipBar('db'); updateChipBar('wk'); updateChipBar('wb'); updateChipBar('mk'); updateChipBar('mb');
 }
 
 // ---- Charts ----
-let chDKW, chDBR, chWKW, chWBR;
+let chDKW, chDBR, chWKW, chWBR, chMKW, chMBR;
 function drawLine(id, labels, series){
   const ctx=document.getElementById(id).getContext('2d');
   return new Chart(ctx,{type:'line',data:{labels,datasets:series},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
@@ -310,20 +371,32 @@ function buildDatasets(buckets, terms){
 function renderAllCharts(items){
   window.__ALL_ITEMS = items;
 
+  // Daily
   const dkw = bucketDailyTerms(items,'keywords',14);
   const dbr = bucketDailyTerms(items,'brands',14);
-  const wkw = bucketWeeklyTerms(items,'keywords',12);
-  const wbr = bucketWeeklyTerms(items,'brands',12);
-
   const dkwTerms = (DK_SELECTED.length? DK_SELECTED : topTerms(dkw.buckets,8)).filter(t=>dkw.buckets[t]);
   const dbrTerms = (DB_SELECTED.length? DB_SELECTED : topTerms(dbr.buckets,8)).filter(t=>dbr.buckets[t]);
-  const wkwTerms = (WK_SELECTED.length? WK_SELECTED : topTerms(wkw.buckets,8)).filter(t=>wkw.buckets[t]);
-  const wbrTerms = (WB_SELECTED.length? WB_SELECTED : topTerms(wbr.buckets,8)).filter(t=>wbr.buckets[t]);
 
   if(chDKW) chDKW.destroy(); chDKW = drawLine('dailyKeywordsChart', dkw.labels, buildDatasets(dkw.buckets, dkwTerms));
   if(chDBR) chDBR.destroy(); chDBR = drawLine('dailyBrandsChart',   dbr.labels, buildDatasets(dbr.buckets, dbrTerms));
+
+  // Weekly
+  const wkw = bucketWeeklyTerms(items,'keywords',12);
+  const wbr = bucketWeeklyTerms(items,'brands',12);
+  const wkwTerms = (WK_SELECTED.length? WK_SELECTED : topTerms(wkw.buckets,8)).filter(t=>wkw.buckets[t]);
+  const wbrTerms = (WB_SELECTED.length? WB_SELECTED : topTerms(wbr.buckets,8)).filter(t=>wbr.buckets[t]);
+
   if(chWKW) chWKW.destroy(); chWKW = drawLine('weeklyKeywordsChart', wkw.labels, buildDatasets(wkw.buckets, wkwTerms));
   if(chWBR) chWBR.destroy(); chWBR = drawLine('weeklyBrandsChart',   wbr.labels, buildDatasets(wbr.buckets, wbrTerms));
+
+  // Monthly
+  const mkw = bucketMonthlyTerms(items,'keywords');
+  const mbr = bucketMonthlyTerms(items,'brands');
+  const mkwTerms = (MK_SELECTED.length? MK_SELECTED : topTerms(mkw.buckets,8)).filter(t=>mkw.buckets[t]);
+  const mbrTerms = (MB_SELECTED.length? MB_SELECTED : topTerms(mbr.buckets,8)).filter(t=>mbr.buckets[t]);
+
+  if(chMKW) chMKW.destroy(); chMKW = drawLine('monthlyKeywordsChart', mkw.labels, buildDatasets(mkw.buckets, mkwTerms));
+  if(chMBR) chMBR.destroy(); chMBR = drawLine('monthlyBrandsChart',   mbr.labels, buildDatasets(mbr.buckets, mbrTerms));
 }
 
 // ---- Load & render ----
@@ -345,7 +418,7 @@ async function load(bust=false){
   document.getElementById('status').textContent='Updated '+new Date(data.generatedAt).toLocaleString();
 }
 document.getElementById('refresh').onclick=()=>load(true);
-load().catch(e=> document.getElementById('status').textContent='Error: '+e.message);
+window.addEventListener('load', ()=>load().catch(e=> document.getElementById('status').textContent='Error: '+e.message));
 </script>
 </body>
 </html>
