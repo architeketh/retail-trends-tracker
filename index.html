@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Retail Trends Tracker — Daily Summary + Charts</title>
+<title>Retail Trends Tracker — Dashboard</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
@@ -59,7 +59,7 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 <div class="container">
   <header>
     <h1>📊 Retail Trends Tracker</h1>
-    <div class="muted">Daily Summary • Grouped Articles • Daily / Weekly / Monthly charts with filters</div>
+    <div class="muted">Daily Summary • Grouped Articles • Daily/Weekly/Monthly charts with filters</div>
     <a href="archive.html" class="btn">📦 Open Archive</a>
   </header>
 
@@ -160,12 +160,65 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 </div>
 
 <script>
-// ---- Config ----
+// ---------- DATA CONFIG ----------
 const DATA_URL = "./data/articles.json";
-const KEYWORDS = ["ai","digital","ecommerce","supply chain","fulfillment","delivery","automation","customer experience","omnichannel","sustainability","personalization","mobile","analytics","inventory","logistics","payment","checkout","returns"];
-const BRANDS   = ["Amazon","Walmart","Target","Home Depot","Costco","Kroger","CVS","Walgreens","Best Buy","Lowe's","Nike","Apple","Etsy","Wayfair","DoorDash"];
 
-// ---- Utilities ----
+// Suggested keyword dictionary (extend as needed)
+const KEYWORDS = [
+  "ai","digital","ecommerce","supply chain","fulfillment","delivery","automation",
+  "customer experience","omnichannel","sustainability","personalization","mobile",
+  "analytics","inventory","logistics","payment","checkout","returns",
+  // Optional: include retailer names as keywords to surface them under keyword charts too
+  "walmart","target","home depot","ikea","best buy","lowe's","costco"
+];
+
+// Canonical brand names (display)
+const BRANDS = [
+  "Amazon","Walmart","Target","Home Depot","Costco","Kroger","CVS","Walgreens",
+  "Best Buy","Lowe's","Nike","Apple","Etsy","Wayfair","DoorDash","IKEA"
+];
+
+// Aliases / common variants (regex)
+const BRAND_ALIASES = {
+  "Walmart":    [/\bwal[-\s]?mart\b/i, /\bwalmart\.com\b/i],
+  "Target":     [/\btarget\b/i, /\btarget\.com\b/i],
+  "Home Depot": [/\bhome\s*[-]?\s*depot\b/i, /\bhomedepot\.com\b/i, /\bthe\s+home\s+depot\b/i],
+  "Costco":     [/\bcostco\b/i, /\bcostco\.com\b/i],
+  "Kroger":     [/\bkroger\b/i, /\bkroger\.com\b/i],
+  "CVS":        [/\bcvs\b/i, /\bcvs\.com\b/i],
+  "Walgreens":  [/\bwalgreens\b/i, /\bwalgreens\.com\b/i],
+  "Best Buy":   [/\bbest\s*buy\b/i, /\bbestbuy\.com\b/i],
+  "Lowe's":     [/\blowe'?s\b/i, /\blowes\.com\b/i],
+  "Nike":       [/\bnike\b/i, /\bnike\.com\b/i],
+  "Apple":      [/\bapple\b/i, /\bapple\.com\b/i],
+  "Etsy":       [/\betsi\b/i, /\betsi\.com\b/i],
+  "Wayfair":    [/\bwayfair\b/i, /\bwayfair\.com\b/i],
+  "DoorDash":   [/\bdoordash\b/i, /\bdoordash\.com\b/i],
+  "IKEA":       [/\bikea\b/i, /\bikea\.com\b/i],
+  "Amazon":     [/\bamazon\b/i, /\bamazon\.com\b/i]
+};
+
+// Domain → brand mapping
+const BRAND_DOMAINS = {
+  "walmart.com": "Walmart",
+  "target.com": "Target",
+  "homedepot.com": "Home Depot",
+  "costco.com": "Costco",
+  "kroger.com": "Kroger",
+  "cvs.com": "CVS",
+  "walgreens.com": "Walgreens",
+  "bestbuy.com": "Best Buy",
+  "lowes.com": "Lowe's",
+  "nike.com": "Nike",
+  "apple.com": "Apple",
+  "etsy.com": "Etsy",
+  "wayfair.com": "Wayfair",
+  "doordash.com": "DoorDash",
+  "ikea.com": "IKEA",
+  "amazon.com": "Amazon"
+};
+
+// ---------- UTILITIES ----------
 function timeago(ts){ const s=Math.floor((Date.now()-ts)/1000);
   if(s<60) return s+"s ago"; if(s<3600) return Math.floor(s/60)+"m ago";
   if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago";
@@ -174,6 +227,7 @@ function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTi
 function startOfWeek(){ const d=new Date(); d.setHours(0,0,0,0); const dow=d.getDay(); d.setDate(d.getDate()-dow); return d.getTime(); }
 function startOfMonth(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(1); return d.getTime(); }
 
+// ---------- RENDERERS ----------
 function renderCards(id, items){
   const html = items.slice(0, 40).map(a=>`
     <div class="card">
@@ -208,31 +262,80 @@ function renderByDay(items){
   document.getElementById('byday').innerHTML = html || '<div class="muted">No items.</div>';
 }
 
-// ---- Client-side tagging fallback ----
-function tagText(title, excerpt, list){
-  const text = `${title} ${excerpt}`.toLowerCase();
+// ---------- TAGGING (improved) ----------
+function normalizeText(s=""){
+  return s
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E]/g, '"')
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function tagKeywords(title, excerpt, list){
+  const text = normalizeText(`${title||""} ${excerpt||""}`).toLowerCase();
   const out = [];
   for(const term of list){
-    const esc = term.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
-    const re = new RegExp(`\\b${esc}\\b`, "i");
+    const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = esc.replace(/\s+/g, "\\s*[- ]\\s*");
+    const re = new RegExp(`\\b${pattern}\\b`, "i");
     if(re.test(text)) out.push(term);
   }
   return out;
 }
+function tagBrands(article){
+  const title = normalizeText(article.title||"");
+  const excerpt = normalizeText(article.excerpt||"");
+  const text = `${title} ${excerpt}`;
+  const found = new Set();
+
+  // aliases & relaxed brand regex
+  for(const brand of BRANDS){
+    const aliases = BRAND_ALIASES[brand] || [];
+    for(const re of aliases){ if(re.test(text)){ found.add(brand); break; } }
+    if(!found.has(brand)){
+      const esc = brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const relaxed = esc.replace(/\s+/g, "\\s*[- ]\\s*");
+      const re2 = new RegExp(`\\b${relaxed}\\b`, "i");
+      if(re2.test(text)) found.add(brand);
+    }
+  }
+
+  // link hostname → brand
+  try{
+    if(article.link){
+      const u = new URL(article.link);
+      const host = u.hostname.toLowerCase().replace(/^www\./, "");
+      for(const d in BRAND_DOMAINS){ if(host.endsWith(d)) found.add(BRAND_DOMAINS[d]); }
+    }
+  }catch(e){}
+
+  return Array.from(found);
+}
 function ensureTags(items){
   for(const a of items){
-    if(!a.keywords) a.keywords = tagText(a.title||"", a.excerpt||"", KEYWORDS);
-    if(!a.brands)   a.brands   = tagText(a.title||"", a.excerpt||"", BRANDS);
+    if(!a.keywords || a.keywords.length===0){
+      a.keywords = tagKeywords(a.title, a.excerpt, KEYWORDS);
+    }
+    if(!a.brands || a.brands.length===0){
+      a.brands = tagBrands(a);
+    }else{
+      const found = new Set();
+      for(const b of a.brands){
+        const canonical = BRANDS.find(x => x.toLowerCase() === String(b).toLowerCase());
+        found.add(canonical || b);
+      }
+      tagBrands(a).forEach(b => found.add(b));
+      a.brands = Array.from(found);
+    }
   }
   return items;
 }
 
-// ---- Daily Summary (by category) ----
+// ---------- DAILY SUMMARY ----------
 function renderDailySummary(items){
   const t0 = startOfToday();
   const today = items.filter(a=>a.published>=t0);
 
-  // category = each keyword; if no keywords, bucket under "Uncategorized"
   const buckets = new Map();
   for(const a of today){
     const keys = (a.keywords && a.keywords.length ? a.keywords : ["Uncategorized"]);
@@ -242,7 +345,6 @@ function renderDailySummary(items){
     }
   }
 
-  // sort categories by #articles desc, then alpha
   const cats = [...buckets.entries()]
     .sort((a,b)=> b[1].length - a[1].length || a[0].localeCompare(b[0]));
 
@@ -261,7 +363,7 @@ function renderDailySummary(items){
   document.getElementById('dailySummary').innerHTML = html || '<div class="muted">No articles today.</div>';
 }
 
-// ---- Time axes ----
+// ---------- TIME AXES ----------
 function lastNDays(n){
   const out=[]; const d=new Date(); d.setHours(0,0,0,0);
   for(let i=n-1;i>=0;i--){ const x=new Date(d); x.setDate(d.getDate()-i); out.push(x.toISOString().slice(0,10)); }
@@ -289,7 +391,7 @@ function last12MonthLabels(){
   return labels;
 }
 
-// ---- Bucketing ----
+// ---------- BUCKETING ----------
 function bucketDailyTerms(items, field, ndays=14){
   const labels = lastNDays(ndays);
   const pos = new Map(labels.map((d,i)=>[d,i]));
@@ -342,15 +444,20 @@ function bucketMonthlyTerms(items, field){
   }
   return { labels, buckets };
 }
+
 function topTerms(buckets, n=8){
   return Object.entries(buckets).map(([k,arr])=>[k,arr.reduce((s,v)=>s+v,0)])
     .sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k])=>k);
 }
-function palette(k){ const c=['#667eea','#764ba2','#f093fb','#4facfe','#43e97b','#fa709a','#30cfd0','#ffbe0b','#8338ec','#3a86ff','#06ffa5','#fb5607']; return c[k % c.length]; }
+function palette(k){
+  const c=['#667eea','#764ba2','#f093fb','#4facfe','#43e97b','#fa709a','#30cfd0','#ffbe0b','#8338ec','#3a86ff','#06ffa5','#fb5607'];
+  return c[k % c.length];
+}
 
-// ---- Filter state ----
+// ---------- FILTERS & CHARTS ----------
 let DK_SELECTED=[], DB_SELECTED=[], WK_SELECTED=[], WB_SELECTED=[], MK_SELECTED=[], MB_SELECTED=[];
 let KW_ALL=[], BR_ALL=[];
+let chDKW, chDBR, chWKW, chWBR, chMKW, chMBR;
 
 function chip(label){ return `<span class="chip" data-v="${label}">${label} <b>×</b></span>`; }
 function updateChipBar(kind){
@@ -405,9 +512,6 @@ function populateSelects(items){
 
   updateChipBar('dk'); updateChipBar('db'); updateChipBar('wk'); updateChipBar('wb'); updateChipBar('mk'); updateChipBar('mb');
 }
-
-// ---- Charts ----
-let chDKW, chDBR, chWKW, chWBR, chMKW, chMBR;
 function drawLine(id, labels, series){
   const ctx=document.getElementById(id).getContext('2d');
   return new Chart(ctx,{type:'line',data:{labels,datasets:series},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
@@ -446,21 +550,24 @@ function renderAllCharts(items){
   if(chMBR) chMBR.destroy(); chMBR = drawLine('monthlyBrandsChart',   mbr.labels, buildDatasets(mbr.buckets, mbrTerms));
 }
 
-// ---- Load & render ----
+// ---------- LOAD ----------
 async function load(bust=false){
   document.getElementById('status').textContent='Loading…';
   const res=await fetch(DATA_URL+(bust?('?t='+Date.now()):'')); 
   const data=await res.json();
   let items=(data.items||[]).filter(a=>a.published).sort((a,b)=>b.published-a.published);
+
+  // Auto-tag if missing / augment brands via aliases & URLs
   items = ensureTags(items);
 
-  renderDailySummary(items); // NEW summary
-
+  // Summary & lists
+  renderDailySummary(items);
   renderCards('list-today', items.filter(a=>a.published>=startOfToday()));
   renderCards('list-week',  items.filter(a=>a.published>=startOfWeek()));
   renderCards('list-month', items.filter(a=>a.published>=startOfMonth()));
   renderByDay(items);
 
+  // Filters & charts
   populateSelects(items);
   renderAllCharts(items);
 
