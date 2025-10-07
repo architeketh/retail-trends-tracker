@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "fetch": "node tools/scrape_feeds.js"
-  },
+    "scripts": {
+  "fetch": "node tools/scrape_feeds.with_tags.js"
+},
   "dependencies": {
     "fast-xml-parser": "^4.4.1"
   }
