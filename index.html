@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Retail Trends Tracker</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+    .container{max-width:1200px;margin:0 auto}
+    header{text-align:center;color:#fff;margin-bottom:24px}
+    h1{font-size:2.2em;margin-bottom:6px;text-shadow:2px 2px 4px rgba(0,0,0,.2)}
+    .controls{background:#fff;padding:12px 16px;border-radius:12px;box-shadow:0 8px 16px rgba(0,0,0,.08);display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    button{background:#667eea;color:#fff;border:none;padding:10px 16px;border-radius:10px;font-weight:700;cursor:pointer}
+    button:hover{background:#5568d3}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+    .section{background:#fff;border-radius:12px;box-shadow:0 8px 16px rgba(0,0,0,.08);padding:18px}
+    .section h2{border-bottom:3px solid #667eea;padding-bottom:6px;margin-bottom:12px}
+    .articles{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+    .card{background:#f9f9f9;border-left:4px solid #667eea;border-radius:10px;padding:12px}
+    .card.new{border-left-color:#22c55e;background:#f0fff4}
+    .meta{display:flex;justify-content:space-between;font-size:12px;color:#667eea;font-weight:800;text-transform:uppercase;margin-bottom:6px}
+    .time{color:#888;font-weight:500}
+    .title{font-weight:800;margin:4px 0;color:#222}
+    .excerpt{font-size:14px;color:#555;margin:6px 0}
+    .pill{display:inline-block;background:#22c55e;color:#fff;border-radius:999px;font-size:10px;font-weight:900;padding:2px 6px;margin-left:6px}
+    summary{cursor:pointer;font-weight:800}
+    .muted{color:#666}
+    @media(max-width:1024px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📊 Retail Trends Tracker</h1>
+      <p class="muted" style="color:#eef">Live retail articles from multiple sources, auto-refreshed by GitHub Actions</p>
+    </header>
+
+    <div class="controls">
+      <div>
+        <button id="refresh">🔄 Manual refresh</button>
+        <span id="status" class="muted">Ready</span>
+      </div>
+      <div class="muted">Data file: <code>/data/articles.json</code></div>
+    </div>
+
+    <div class="grid">
+      <div class="section">
+        <h2>📰 Recent Articles</h2>
+        <div id="articles" class="articles"></div>
+      </div>
+      <div class="section">
+        <h2>📦 Archive</h2>
+        <div id="archive"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const DATA_URL = "./data/articles.json"; // served by GitHub Pages
+const NEW_WINDOW_MS = 2 * 60 * 60 * 1000; // 2h
+const LS_KEY = "rtt_seen_ts_v1";
+
+let seenTs = 0;
+try { seenTs = parseInt(localStorage.getItem(LS_KEY) || "0", 10) || 0; } catch {}
+
+function timeago(ts){
+  const s = Math.floor((Date.now() - ts)/1000);
+  if (s < 60) return s + "s ago";
+  if (s < 3600) return Math.floor(s/60) + "m ago";
+  if (s < 86400) return Math.floor(s/3600) + "h ago";
+  return Math.floor(s/86400) + "d ago";
+}
+
+function groupByDate(items){
+  const map = {};
+  for (const a of items){
+    const d = new Date(a.published || Date.now()).toISOString().slice(0,10);
+    (map[d] = map[d] || []).push(a);
+  }
+  return Object.entries(map).sort((a,b)=> b[0].localeCompare(a[0]));
+}
+
+async function loadData(bust=false){
+  document.getElementById("status").textContent = "Loading…";
+  const url = bust ? DATA_URL + "?t=" + Date.now() : DATA_URL;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error("Failed to load data " + res.status);
+  const data = await res.json();
+  document.getElementById("status").textContent = "Updated " + new Date(data.generatedAt).toLocaleString();
+  render(data.items);
+}
+
+function render(items){
+  // mark new vs last seen time
+  const now = Date.now();
+  const cards = items.map(a => {
+    const isNew = (a.published && a.published > seenTs && now - a.published < NEW_WINDOW_MS);
+    return `<div class="card ${isNew ? "new": ""}">
+      <div class="meta"><span>${a.source || "Source"}</span><span class="time">${timeago(a.published||Date.now())}</span></div>
+      <div class="title">${a.title}${isNew? '<span class="pill">NEW</span>':''}</div>
+      <div class="excerpt">${a.excerpt || ""}</div>
+      <a href="${a.link}" target="_blank" rel="noopener">Read →</a>
+    </div>`;
+  }).join("");
+  document.getElementById("articles").innerHTML = cards;
+
+  // archive
+  const grouped = groupByDate(items);
+  const html = grouped.map(([day, list]) => {
+    return `<details><summary>${day} — ${list.length} articles</summary>
+      <ul style="margin:8px 0 0 18px">
+        ${list.map(a => `<li><a href="${a.link}" target="_blank" rel="noopener">${a.title}</a></li>`).join("")}
+      </ul>
+    </details>`;
+  }).join("");
+  document.getElementById("archive").innerHTML = html || '<div class="muted">No archive yet.</div>';
+}
+
+document.getElementById("refresh").addEventListener("click", async () => {
+  // manual refresh just reloads the JSON (Actions will update it hourly)
+  try {
+    await loadData(true);
+    localStorage.setItem(LS_KEY, String(Date.now())); // move window so NEW shrinks over time
+  } catch (e){
+    document.getElementById("status").textContent = "Error: " + e.message;
+  }
+});
+
+// initial load
+loadData().catch(e => document.getElementById("status").textContent = "Error: " + e.message);
+</script>
+</body>
+</html>

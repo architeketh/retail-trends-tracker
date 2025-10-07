@@ -1,0 +1,11 @@
+{
+  "name": "retail-trends-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "node tools/scrape_feeds.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.4.1"
+  }
+}
