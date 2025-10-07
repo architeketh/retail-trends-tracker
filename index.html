@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Retail Trends Tracker — Time Buckets & Charts</title>
+<title>Retail Trends Tracker — Time Buckets & Chips</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
 .container{max-width:1320px;margin:0 auto}
 header{text-align:center;color:#fff;margin-bottom:22px}
 h1{font-size:2.1em;margin-bottom:6px;text-shadow:2px 2px 4px rgba(0,0,0,.2)}
@@ -37,6 +37,13 @@ a.link{color:#667eea;text-decoration:none;font-weight:700}
 a.link:hover{text-decoration:underline}
 .charts{display:grid;grid-template-columns:1fr;gap:16px}
 @media(min-width:1100px){.charts{grid-template-columns:1fr 1fr}}
+/* chip UI */
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px}
+select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
+.btn-ghost{background:#e5e7eb;color:#333}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#667eea;color:#fff;border-radius:999px;font-size:12px;font-weight:800;padding:4px 10px;cursor:pointer}
+.chip b{font-size:14px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 </head>
@@ -44,7 +51,7 @@ a.link:hover{text-decoration:underline}
 <div class="container">
   <header>
     <h1>📊 Retail Trends Tracker</h1>
-    <div class="muted">Grouped by day/week/month • Daily & Weekly keyword/brand charts</div>
+    <div class="muted">Grouped by day/week/month • Daily & Weekly keyword/brand charts (with filters)</div>
     <a href="archive.html" class="btn">📦 Open Archive</a>
   </header>
 
@@ -60,21 +67,9 @@ a.link:hover{text-decoration:underline}
     <div>
       <div class="section">
         <h2>📰 Articles by Time Period</h2>
-
-        <div class="bucket">
-          <h3>Today</h3>
-          <div id="list-today" class="articles"></div>
-        </div>
-
-        <div class="bucket">
-          <h3>This Week</h3>
-          <div id="list-week" class="articles"></div>
-        </div>
-
-        <div class="bucket">
-          <h3>This Month</h3>
-          <div id="list-month" class="articles"></div>
-        </div>
+        <div class="bucket"><h3>Today</h3><div id="list-today" class="articles"></div></div>
+        <div class="bucket"><h3>This Week</h3><div id="list-week" class="articles"></div></div>
+        <div class="bucket"><h3>This Month</h3><div id="list-month" class="articles"></div></div>
       </div>
 
       <div class="section">
@@ -86,18 +81,41 @@ a.link:hover{text-decoration:underline}
     <div>
       <div class="section">
         <h2>📈 Daily Keywords (14 days)</h2>
+        <div class="row">
+          <select id="dkSelect"><option value="">+ Add keyword…</option></select>
+          <button id="dkClear" class="btn-ghost">Clear</button>
+          <div id="dkChips" class="chips"></div>
+        </div>
         <canvas id="dailyKeywordsChart"></canvas>
       </div>
+
       <div class="section">
         <h2>📈 Daily Brands (14 days)</h2>
+        <div class="row">
+          <select id="dbSelect"><option value="">+ Add brand…</option></select>
+          <button id="dbClear" class="btn-ghost">Clear</button>
+          <div id="dbChips" class="chips"></div>
+        </div>
         <canvas id="dailyBrandsChart"></canvas>
       </div>
+
       <div class="section">
         <h2>📈 Weekly Keywords (12 weeks)</h2>
+        <div class="row">
+          <select id="wkSelect"><option value="">+ Add keyword…</option></select>
+          <button id="wkClear" class="btn-ghost">Clear</button>
+          <div id="wkChips" class="chips"></div>
+        </div>
         <canvas id="weeklyKeywordsChart"></canvas>
       </div>
+
       <div class="section">
         <h2>📈 Weekly Brands (12 weeks)</h2>
+        <div class="row">
+          <select id="wbSelect"><option value="">+ Add brand…</option></select>
+          <button id="wbClear" class="btn-ghost">Clear</button>
+          <div id="wbChips" class="chips"></div>
+        </div>
         <canvas id="weeklyBrandsChart"></canvas>
       </div>
     </div>
@@ -110,7 +128,7 @@ const DATA_URL = "./data/articles.json";
 const KEYWORDS = ["ai","digital","ecommerce","supply chain","fulfillment","delivery","automation","customer experience","omnichannel","sustainability","personalization","mobile","analytics","inventory","logistics","payment","checkout","returns"];
 const BRANDS   = ["Amazon","Walmart","Target","Home Depot","Costco","Kroger","CVS","Walgreens","Best Buy","Lowe's","Nike","Apple","Etsy","Wayfair","DoorDash"];
 
-// ---- Helpers ----
+// ---- Utilities ----
 function timeago(ts){ const s=Math.floor((Date.now()-ts)/1000);
   if(s<60) return s+"s ago"; if(s<3600) return Math.floor(s/60)+"m ago";
   if(s<86400) return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago";
@@ -119,7 +137,7 @@ function startOfToday(){ const d=new Date(); d.setHours(0,0,0,0); return d.getTi
 function startOfWeek(){ const d=new Date(); d.setHours(0,0,0,0); const dow=d.getDay(); d.setDate(d.getDate()-dow); return d.getTime(); }
 function startOfMonth(){ const d=new Date(); d.setHours(0,0,0,0); d.setDate(1); return d.getTime(); }
 
-function renderCards(containerId, items){
+function renderCards(id, items){
   const html = items.slice(0, 40).map(a=>`
     <div class="card">
       <div class="meta"><span>${a.source||'Source'}</span><span class="time">${timeago(a.published||Date.now())}</span></div>
@@ -131,7 +149,7 @@ function renderCards(containerId, items){
       </div>
       <a class="link" href="${a.link}" target="_blank" rel="noopener">Read →</a>
     </div>`).join("");
-  document.getElementById(containerId).innerHTML = html || '<div class="muted">No articles</div>';
+  document.getElementById(id).innerHTML = html || '<div class="muted">No articles</div>';
 }
 
 function groupByDay(items){
@@ -142,7 +160,6 @@ function groupByDay(items){
   }
   return Object.entries(map).sort((a,b)=> b[0].localeCompare(a[0]));
 }
-
 function renderByDay(items){
   const groups = groupByDay(items);
   const html = groups.map(([day,list])=>`
@@ -173,38 +190,30 @@ function ensureTags(items){
   return items;
 }
 
-// ---- Time axes (daily / weekly) ----
-function lastNDays(n){ // returns array of ISO dates "YYYY-MM-DD"
+// ---- Time axes ----
+function lastNDays(n){
   const out=[]; const d=new Date(); d.setHours(0,0,0,0);
   for(let i=n-1;i>=0;i--){ const x=new Date(d); x.setDate(d.getDate()-i); out.push(x.toISOString().slice(0,10)); }
   return out;
 }
-function isoWeek(d){ // returns "YYYY-Www"
-  const dt = new Date(d.getTime());
-  dt.setHours(0,0,0,0);
-  // Thursday in current week decides the year.
+function isoWeek(d){
+  const dt = new Date(d.getTime()); dt.setHours(0,0,0,0);
   dt.setDate(dt.getDate() + 3 - ((dt.getDay()+6)%7));
   const week1 = new Date(dt.getFullYear(),0,4);
-  const week = 1 + Math.round(((dt.getTime() - week1.getTime())/86400000 - 3 + ((week1.getDay()+6)%7)) / 7);
-  const yyyy = dt.getFullYear();
-  return `${yyyy}-W${String(week).padStart(2,"0")}`;
+  const week = 1 + Math.round(((dt - week1)/86400000 - 3 + ((week1.getDay()+6)%7)) / 7);
+  return `${dt.getFullYear()}-W${String(week).padStart(2,"0")}`;
 }
 function lastNWeeks(n){
-  const out=[];
-  const today = new Date(); today.setHours(0,0,0,0);
-  for(let i=n-1;i>=0;i--){
-    const d = new Date(today); d.setDate(today.getDate() - i*7);
-    out.push(isoWeek(d));
-  }
-  // de-dup in case of month/year boundaries (rare but safe)
+  const out=[]; const today=new Date(); today.setHours(0,0,0,0);
+  for(let i=n-1;i>=0;i--){ const d=new Date(today); d.setDate(today.getDate()-i*7); out.push(isoWeek(d)); }
   return out.filter((v,i,a)=>a.indexOf(v)===i);
 }
 
-// ---- Bucketing counts ----
+// ---- Bucketing ----
 function bucketDailyTerms(items, field, ndays=14){
   const labels = lastNDays(ndays);
   const pos = new Map(labels.map((d,i)=>[d,i]));
-  const buckets = {}; // term -> [ndays]
+  const buckets = {};
   for(const a of items){
     if(!a.published) continue;
     const day = new Date(a.published).toISOString().slice(0,10);
@@ -237,65 +246,100 @@ function topTerms(buckets, n=8){
 }
 function palette(k){ const c=['#667eea','#764ba2','#f093fb','#4facfe','#43e97b','#fa709a','#30cfd0','#ffbe0b','#8338ec','#3a86ff','#06ffa5','#fb5607']; return c[k % c.length]; }
 
-// ---- Charts ----
-let chDKW, chDBR, chWKW, chWBR;
-function drawLine(canvasId, labels, series){
-  const ctx = document.getElementById(canvasId).getContext('2d');
-  return new Chart(ctx,{
-    type:'line',
-    data:{ labels, datasets: series },
-    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } } }
+// ---- Filter state ----
+let DK_SELECTED=[], DB_SELECTED=[], WK_SELECTED=[], WB_SELECTED=[];
+let KW_ALL=[], BR_ALL=[];
+
+function chip(label){ return `<span class="chip" data-v="${label}">${label} <b>×</b></span>`; }
+function updateChipBar(kind){
+  const map = {
+    dk: ['dkChips', ()=>DK_SELECTED, v=>DK_SELECTED=DK_SELECTED.filter(x=>x!==v)],
+    db: ['dbChips', ()=>DB_SELECTED, v=>DB_SELECTED=DB_SELECTED.filter(x=>x!==v)],
+    wk: ['wkChips', ()=>WK_SELECTED, v=>WK_SELECTED=WK_SELECTED.filter(x=>x!==v)],
+    wb: ['wbChips', ()=>WB_SELECTED, v=>WB_SELECTED=WB_SELECTED.filter(x=>x!==v)],
+  };
+  const [id, get, remove] = map[kind];
+  const el = document.getElementById(id);
+  el.innerHTML = get().map(chip).join('');
+  [...el.querySelectorAll('.chip')].forEach(s=>{
+    s.onclick = ()=>{
+      const v = s.getAttribute('data-v');
+      remove(v);
+      updateChipBar(kind);
+      renderAllCharts(window.__ALL_ITEMS||[]);
+    };
   });
 }
+function populateSelects(items){
+  // build term dictionaries from items
+  const kwSet=new Set(), brSet=new Set();
+  for(const a of items){
+    (a.keywords||[]).forEach(k=>kwSet.add(k));
+    (a.brands||[]).forEach(b=>brSet.add(b));
+  }
+  KW_ALL = Array.from(kwSet).sort((a,b)=>a.localeCompare(b));
+  BR_ALL = Array.from(brSet).sort((a,b)=>a.localeCompare(b));
+
+  const sel = (id,list)=>{ const el=document.getElementById(id); el.innerHTML = `<option value="">+ Add…</option>`+list.map(x=>`<option>${x}</option>`).join(''); return el; };
+
+  const dkSel=sel('dkSelect',KW_ALL), dbSel=sel('dbSelect',BR_ALL),
+        wkSel=sel('wkSelect',KW_ALL), wbSel=sel('wbSelect',BR_ALL);
+
+  dkSel.onchange = ()=>{ const v=dkSel.value; if(v && !DK_SELECTED.includes(v)){ DK_SELECTED.push(v); updateChipBar('dk'); renderAllCharts(window.__ALL_ITEMS||[]);} dkSel.value=""; };
+  dbSel.onchange = ()=>{ const v=dbSel.value; if(v && !DB_SELECTED.includes(v)){ DB_SELECTED.push(v); updateChipBar('db'); renderAllCharts(window.__ALL_ITEMS||[]);} dbSel.value=""; };
+  wkSel.onchange = ()=>{ const v=wkSel.value; if(v && !WK_SELECTED.includes(v)){ WK_SELECTED.push(v); updateChipBar('wk'); renderAllCharts(window.__ALL_ITEMS||[]);} wkSel.value=""; };
+  wbSel.onchange = ()=>{ const v=wbSel.value; if(v && !WB_SELECTED.includes(v)){ WB_SELECTED.push(v); updateChipBar('wb'); renderAllCharts(window.__ALL_ITEMS||[]);} wbSel.value=""; };
+
+  document.getElementById('dkClear').onclick=()=>{ DK_SELECTED=[]; updateChipBar('dk'); renderAllCharts(window.__ALL_ITEMS||[]); };
+  document.getElementById('dbClear').onclick=()=>{ DB_SELECTED=[]; updateChipBar('db'); renderAllCharts(window.__ALL_ITEMS||[]); };
+  document.getElementById('wkClear').onclick=()=>{ WK_SELECTED=[]; updateChipBar('wk'); renderAllCharts(window.__ALL_ITEMS||[]); };
+  document.getElementById('wbClear').onclick=()=>{ WB_SELECTED=[]; updateChipBar('wb'); renderAllCharts(window.__ALL_ITEMS||[]); };
+
+  updateChipBar('dk'); updateChipBar('db'); updateChipBar('wk'); updateChipBar('wb');
+}
+
+// ---- Charts ----
+let chDKW, chDBR, chWKW, chWBR;
+function drawLine(id, labels, series){
+  const ctx=document.getElementById(id).getContext('2d');
+  return new Chart(ctx,{type:'line',data:{labels,datasets:series},options:{responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
+}
 function buildDatasets(buckets, terms){
-  return terms.map((t,i)=>({
-    label:t, data:buckets[t],
-    borderColor:palette(i), backgroundColor:palette(i)+'22',
-    tension:.35, fill:false, borderWidth:2
-  }));
+  return terms.map((t,i)=>({label:t,data:buckets[t],borderColor:palette(i),backgroundColor:palette(i)+'22',tension:.35,fill:false,borderWidth:2}));
 }
 function renderAllCharts(items){
-  // Daily
+  window.__ALL_ITEMS = items;
+
   const dkw = bucketDailyTerms(items,'keywords',14);
   const dbr = bucketDailyTerms(items,'brands',14);
-  const dkwTerms = topTerms(dkw.buckets,8);
-  const dbrTerms = topTerms(dbr.buckets,8);
-
-  if(chDKW) chDKW.destroy();
-  chDKW = drawLine('dailyKeywordsChart', dkw.labels, buildDatasets(dkw.buckets, dkwTerms));
-  if(chDBR) chDBR.destroy();
-  chDBR = drawLine('dailyBrandsChart', dbr.labels, buildDatasets(dbr.buckets, dbrTerms));
-
-  // Weekly
   const wkw = bucketWeeklyTerms(items,'keywords',12);
   const wbr = bucketWeeklyTerms(items,'brands',12);
-  const wkwTerms = topTerms(wkw.buckets,8);
-  const wbrTerms = topTerms(wbr.buckets,8);
 
-  if(chWKW) chWKW.destroy();
-  chWKW = drawLine('weeklyKeywordsChart', wkw.labels, buildDatasets(wkw.buckets, wkwTerms));
-  if(chWBR) chWBR.destroy();
-  chWBR = drawLine('weeklyBrandsChart', wbr.labels, buildDatasets(wbr.buckets, wbrTerms));
+  const dkwTerms = (DK_SELECTED.length? DK_SELECTED : topTerms(dkw.buckets,8)).filter(t=>dkw.buckets[t]);
+  const dbrTerms = (DB_SELECTED.length? DB_SELECTED : topTerms(dbr.buckets,8)).filter(t=>dbr.buckets[t]);
+  const wkwTerms = (WK_SELECTED.length? WK_SELECTED : topTerms(wkw.buckets,8)).filter(t=>wkw.buckets[t]);
+  const wbrTerms = (WB_SELECTED.length? WB_SELECTED : topTerms(wbr.buckets,8)).filter(t=>wbr.buckets[t]);
+
+  if(chDKW) chDKW.destroy(); chDKW = drawLine('dailyKeywordsChart', dkw.labels, buildDatasets(dkw.buckets, dkwTerms));
+  if(chDBR) chDBR.destroy(); chDBR = drawLine('dailyBrandsChart',   dbr.labels, buildDatasets(dbr.buckets, dbrTerms));
+  if(chWKW) chWKW.destroy(); chWKW = drawLine('weeklyKeywordsChart', wkw.labels, buildDatasets(wkw.buckets, wkwTerms));
+  if(chWBR) chWBR.destroy(); chWBR = drawLine('weeklyBrandsChart',   wbr.labels, buildDatasets(wbr.buckets, wbrTerms));
 }
 
-// ---- Load and render ----
+// ---- Load & render ----
 async function load(bust=false){
   document.getElementById('status').textContent='Loading…';
   const res=await fetch(DATA_URL+(bust?('?t='+Date.now()):'')); 
   const data=await res.json();
   let items=(data.items||[]).filter(a=>a.published).sort((a,b)=>b.published-a.published);
-  items = ensureTags(items); // fallback tagger if fields are missing
+  items = ensureTags(items);
 
-  // Buckets: today / this week / this month
-  const t0=startOfToday(), w0=startOfWeek(), m0=startOfMonth();
-  renderCards('list-today', items.filter(a=>a.published>=t0));
-  renderCards('list-week',  items.filter(a=>a.published>=w0));
-  renderCards('list-month', items.filter(a=>a.published>=m0));
-
-  // By-day expandable list
+  renderCards('list-today', items.filter(a=>a.published>=startOfToday()));
+  renderCards('list-week',  items.filter(a=>a.published>=startOfWeek()));
+  renderCards('list-month', items.filter(a=>a.published>=startOfMonth()));
   renderByDay(items);
 
-  // Charts
+  populateSelects(items);
   renderAllCharts(items);
 
   document.getElementById('status').textContent='Updated '+new Date(data.generatedAt).toLocaleString();
