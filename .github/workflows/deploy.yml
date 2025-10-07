@@ -1,34 +1,52 @@
-name: Build & Publish to gh-pages
+name: Build & Deploy (Retail Trends)
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch: {}
+    branches: [ "main" ]     # run on every push
+  workflow_dispatch: {}      # manual button
   schedule:
-    - cron: "15 * * * *"
+    - cron: "15 * * * *"     # hourly
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: "20"      # no cache here (avoids lockfile warning)
 
-      - run: npm install
+      - name: Install deps
+        run: npm install
+
       - name: Build data file
-        run: npm run fetch
+        run: npm run fetch        # runs tools/scrape_feeds.js
 
-      # publish ./ to gh-pages
-      - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: .
-          publish_branch: gh-pages
+          path: .                 # publish index.html + data/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
