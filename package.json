@@ -1,12 +1,13 @@
 {
   "name": "retail-trends-tracker",
   "private": true,
+  "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "scripts": {
-  "fetch": "node tools/scrape_feeds.with_tags.js"
-},
+  "license": "MIT",
   "dependencies": {
     "fast-xml-parser": "^4.4.1"
+  },
+  "scripts": {
+    "fetch": "node tools/scrape_feeds.with_tags.js"
   }
 }
