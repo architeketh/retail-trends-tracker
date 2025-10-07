@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Retail Trends Tracker — Daily / Weekly / Monthly with Chips</title>
+<title>Retail Trends Tracker — Daily Summary + Charts</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;background:linear-gradient(135deg,#667eea 0%, #764ba2 100%);min-height:100vh;padding:20px}
@@ -44,6 +44,14 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;background:#667eea;color:#fff;border-radius:999px;font-size:12px;font-weight:800;padding:4px 10px;cursor:pointer}
 .chip b{font-size:14px}
+/* daily summary */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.summary-card{background:#f9f9f9;border-left:4px solid #22c55e;border-radius:10px;padding:12px}
+.summary-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.summary-title{font-weight:800;color:#1f2937}
+.summary-count{background:#22c55e;color:#fff;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:800}
+.summary-list{margin:6px 0 0 16px}
+.summary-list li{margin:4px 0}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js" defer></script>
 </head>
@@ -51,7 +59,7 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 <div class="container">
   <header>
     <h1>📊 Retail Trends Tracker</h1>
-    <div class="muted">Grouped by day/week/month • Daily, Weekly & Monthly keyword/brand charts (with filters)</div>
+    <div class="muted">Daily Summary • Grouped Articles • Daily / Weekly / Monthly charts with filters</div>
     <a href="archive.html" class="btn">📦 Open Archive</a>
   </header>
 
@@ -65,6 +73,12 @@ select{min-width:220px;padding:8px;border:2px solid #e0e0e0;border-radius:8px}
 
   <div class="grid">
     <div>
+      <!-- DAILY SUMMARY -->
+      <div class="section">
+        <h2>🗓️ Daily Summary (Articles by Category)</h2>
+        <div id="dailySummary" class="summary-grid"></div>
+      </div>
+
       <div class="section">
         <h2>📰 Articles by Time Period</h2>
         <div class="bucket"><h3>Today</h3><div id="list-today" class="articles"></div></div>
@@ -213,6 +227,40 @@ function ensureTags(items){
   return items;
 }
 
+// ---- Daily Summary (by category) ----
+function renderDailySummary(items){
+  const t0 = startOfToday();
+  const today = items.filter(a=>a.published>=t0);
+
+  // category = each keyword; if no keywords, bucket under "Uncategorized"
+  const buckets = new Map();
+  for(const a of today){
+    const keys = (a.keywords && a.keywords.length ? a.keywords : ["Uncategorized"]);
+    for(const k of keys){
+      if(!buckets.has(k)) buckets.set(k, []);
+      buckets.get(k).push(a);
+    }
+  }
+
+  // sort categories by #articles desc, then alpha
+  const cats = [...buckets.entries()]
+    .sort((a,b)=> b[1].length - a[1].length || a[0].localeCompare(b[0]));
+
+  const html = cats.map(([cat,list])=>`
+    <div class="summary-card">
+      <div class="summary-head">
+        <div class="summary-title">${cat}</div>
+        <span class="summary-count">${list.length}</span>
+      </div>
+      <ul class="summary-list">
+        ${list.slice(0,8).map(a=>`<li><a class="link" href="${a.link}" target="_blank" rel="noopener">${a.title}</a></li>`).join("")}
+      </ul>
+    </div>
+  `).join("");
+
+  document.getElementById('dailySummary').innerHTML = html || '<div class="muted">No articles today.</div>';
+}
+
 // ---- Time axes ----
 function lastNDays(n){
   const out=[]; const d=new Date(); d.setHours(0,0,0,0);
@@ -294,7 +342,6 @@ function bucketMonthlyTerms(items, field){
   }
   return { labels, buckets };
 }
-
 function topTerms(buckets, n=8){
   return Object.entries(buckets).map(([k,arr])=>[k,arr.reduce((s,v)=>s+v,0)])
     .sort((a,b)=>b[1]-a[1]).slice(0,n).map(([k])=>k);
@@ -406,6 +453,8 @@ async function load(bust=false){
   const data=await res.json();
   let items=(data.items||[]).filter(a=>a.published).sort((a,b)=>b.published-a.published);
   items = ensureTags(items);
+
+  renderDailySummary(items); // NEW summary
 
   renderCards('list-today', items.filter(a=>a.published>=startOfToday()));
   renderCards('list-week',  items.filter(a=>a.published>=startOfWeek()));
